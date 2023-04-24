@@ -53,3 +53,4 @@ dkms.conf
 
 # Мусор
 *.vscode
+geometry
