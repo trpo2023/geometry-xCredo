@@ -1,120 +1,349 @@
+#include <ctype.h>
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//Данный код проверяет правильность ввода информации о фигурах типа "окружность" в файле "circle.txt". Он считывает строки из этого файла и передает их в функцию checkerrors, которая проверяет каждую строку на наличие ошибок во вводе информации. //
-#define SIZE 100
+#define NAME_SIZE 25
 
-int checker(char* str) //Функция checker проверяет правильность ввода названия фигуры, которое должно начинаться с "circle ". Если это условие не выполнено, возвращает значение 1, что говорит, что название введено неверно.//
+typedef struct point {
+    double x;
+    double y;
+} Point;
+
+typedef struct circle {
+    Point point;
+    double raduis;
+    double perimeter;
+    double area;
+} Circle;
+
+enum Errors {
+    _FILE,
+    NOT_FILE,
+    ER_NAME,
+    ER_NOT_DOUBLE,
+    ER_BACK_BRACE,
+    ER_UNEXPECT_TOKEN,
+    ER_EXPECT_COMMA,
+    ER_UNEXPECT_COMMA,
+};
+
+void print_error(int column, int status, int is_file, FILE* file) // выводит сообщение об ошибке в зависимости от включенного макроса is_file (если он равен _FILE, то вывод происходит в файл, если NOT_FILE, то в консоль). В зависимости от переданного статуса, выводится соответствующее сообщение с номером колонки и символом "^" под неё.
+
 {
-    int ret = 1;
-    char rec[SIZE];
-    for (int i = 0; i < strlen(str); i++) {
-        if (str[i] != '(')
-            rec[i] = str[i];
+    if (is_file == _FILE) {
+        char temp[256];
+        fseek(file, -column - 1, SEEK_CUR);
+        fgets(temp, 255, file);
+        printf("\n%s", temp);
+    }
+
+    for (int i = 0; i < column; i++) {
+        putchar(' ');
+    }
+    printf("\e[1;31m^\e[0m\n");
+    switch (status) {
+    case ER_NAME:
+        printf("\e[1;31mError\e[0m at column %d: \e[1;31mexpected "
+               "'circle'\e[0m\n",
+               column);
+        break;
+    case ER_NOT_DOUBLE:
+        printf("\e[1;31mError\e[0m at column %d: \e[1;31mexpected "
+               "'<double>'\e[0m\n",
+               column);
+        break;
+    case ER_BACK_BRACE:
+        printf("\e[1;31mError\e[0m at column %d: \e[1;31mexpected ')'\e[0m\n",
+               column);
+        break;
+    case ER_UNEXPECT_TOKEN:
+        printf("\e[1;31mError\e[0m at column %d: \e[1;31munexpected "
+               "token\e[0m\n",
+               column);
+        break;
+    case ER_EXPECT_COMMA:
+        printf("\e[1;31mError\e[0m at column %d: \e[1;31mexpected ','\e[0m\n",
+               column);
+        break;
+    case ER_UNEXPECT_COMMA:
+        printf("\e[1;31mError\e[0m at column %d: \e[1;31munexpected ','\e[0m\n",
+               column);
+    }
+}
+
+void to_lower_string(char* string) // приводит строку к нижнему регистру, используя tolower().
+{
+    while (*string != '\0') {
+        *string = tolower(*string);
+        string++;
+    }
+}
+
+void del_space(int* column, FILE* file) // удаляет пробелы из файла и увеличивает значение переменной column на количество удаленных символов.
+{
+    char ch;
+    while ((ch = getc(file)) == ' ') {
+        *column += 1;
+        continue;
+    }
+    if (ch != ' ')
+        ungetc(ch, file);
+}
+
+double get_number(int* column, int is_file, FILE* file) // считывает число из файла, и пропускает все пробелы, чтобы переместить текущую позицию к указателю на следующий символ. Назначает 1, если находит точку и minis_count++, если находит минус.
+{
+    char temp[25];
+    char ch;
+    int point_count = 0;
+    int i = 0;
+    int minus_count = 0;
+
+    del_space(column, file);
+
+    while ((ch = getc(file)) != ' ') {
+        temp[i] = ch;
+
+        if (temp[i] == '.') {
+            point_count++;
+            if (point_count > 1) {
+                if (is_file == _FILE)
+                    print_error(*column + i + 1, ER_NOT_DOUBLE, _FILE, file);
+                else
+                    print_error(*column + i + 1, ER_NOT_DOUBLE, NOT_FILE, file);
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (temp[i] == '-') {
+            minus_count++;
+            if (minus_count > 1) {
+                if (is_file == _FILE)
+                    print_error(*column + i + 1, ER_NOT_DOUBLE, _FILE, file);
+                else
+                    print_error(*column + i + 1, ER_NOT_DOUBLE, NOT_FILE, file);
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (temp[i] == ')') {
+            ungetc(temp[i], file);
+            i++;
+            break;
+        }
+
+        if (temp[i] == ',') {
+            ungetc(temp[i], file);
+            break;
+        }
+
+        if (temp[i] == '(') {
+            i++;
+            if (is_file == _FILE)
+                print_error(*column + i, ER_BACK_BRACE, _FILE, file);
+            else
+                print_error(*column + i, ER_BACK_BRACE, NOT_FILE, file);
+            exit(EXIT_FAILURE);
+        }
+
+        if (!isdigit(temp[i]) && temp[i] != '.' && temp[i] != '-') {
+            i++;
+            if (is_file == _FILE)
+                print_error(*column + i, ER_NOT_DOUBLE, _FILE, file);
+            else
+                print_error(*column + i, ER_NOT_DOUBLE, NOT_FILE, file);
+            exit(EXIT_FAILURE);
+        }
+
+        i++;
+    }
+    del_space(column, file);
+    *column += i + 1;
+    char* eptr;
+    return strtod(temp, &eptr);
+}
+
+bool expect(char expect, int* column, int status, int is_file, FILE* file) // проверяет, равен ли следующий символ expected символу на позиции column в файле. В случае несоответствия, выводит сообщение об ошибке.
+{
+    char ch;
+    if ((ch = getc(file)) == expect) {
+        return true;
+    } else {
+        if (is_file == _FILE)
+            print_error(*column, status, _FILE, file);
         else
-            break;
+            print_error(*column, status, NOT_FILE, file);
+        exit(EXIT_FAILURE);
     }
-    char figure[] = "circle ";
-    if (strcmp(rec, figure) == 0) {
-        ret = 0;
-    }
-    return ret;
 }
 
-int checkarg(char* str) //Функция checkarg проверяет правильность ввода аргументов, которые указывают координаты центра фигуры и её радиус. Она проверяет положение запятых, точек и пробелов в строке и считает количество этих символов. Если количество этих символов не соответствует требуемому, возвращает значение 1, указывая на наличие ошибки в координатах или радиусе. //
+bool unexpect(char unexpect, int* column, int status, int is_file, FILE* file) // проверяет, отличается ли следующий символ от заданного. Если да, то выводится сообщение об ошибке и программа завершается. Если нет, то функция возвращает true.
 {
-    int ret = 0;
-    int count = 0;
-    for (int i = 8; str[i] != ',' && i < strlen(str); i++) {
-        if ((str[i] != '.' && str[i] != ' ')
-            && !(str[i] >= 48 && str[i] <= 57)) {
-            printf("Figure coordinates entered incorrectly\n\n");
-            ret++;
-            return 1;
-        }
-        if (str[i] >= 48 && str[i] <= 57 && str[i + 1] == ' ')
-            count++;
-        if (str[i] == '.' && str[i + 1] == ')')
-            count += 2;
+    char ch;
+    if ((ch = getc(file)) == unexpect) {
+        if (is_file == _FILE)
+            print_error(*column, status, _FILE, file);
+        else
+            print_error(*column, status, NOT_FILE, file);
+        exit(EXIT_FAILURE);
     }
-    if (count + 1 != 2) {
-        printf("Figure coordinates entered incorrectly\n\n");
-        ret++;
-        return ret;
-    }
-    int index = 0;
-    for (int i = 0; i != strlen(str); i++) {
-        if (str[i] == ',') {
-            index = i + 1;
-            i = strlen(str) - 1;
-        }
-    }
-    for (; str[index] != ')' && index < strlen(str); index++) {
-        if ((str[index] != '.' && str[index] != ' ')
-            && !(str[index] >= 48 && str[index] <= 57)) {
-            printf("Figure radius entered incorrectly\n\n");
-            ret++;
-            return 1;
-        }
-        if (str[index] >= 48 && str[index] <= 57 && str[index + 1] == ' ')
-            count++;
-        if (str[index] == '.' && str[index + 1] == ' ')
-            count += 2;
-    }
-    if (count != 1) {
-        printf("Figure radius entered incorrectly\n\n");
-        ret++;
-    }
-    return ret;
+    ungetc(ch, file);
+    return true;
 }
 
-int checkarguments(char* str) //Функция checkarguments проверяет наличие правильного окончания строки. Оно должно заканчиваться на символ ')' и если это условие не выполняется, возвращает значение 1. //
+void get_point(Point* point, int* column, int is_file, FILE* file) // считывает координаты точки из файла (или stdin) и проверяет наличие запятой между ними.
 {
-    int ret = 1, firstBracket = 0;
-    int endingSymbol;
-    if (str[strlen(str) - 1] == '\n')
-        endingSymbol = strlen(str) - 2;
-    else
-        endingSymbol = strlen(str) - 1;
-    for (int i = 0; i < strlen(str); i++) {
-        if (str[i] == ')') {
-            firstBracket = i;
-            break;
+    if (is_file == _FILE) {
+        point->x = get_number(column, _FILE, file);
+        unexpect(',', column, ER_UNEXPECT_COMMA, _FILE, file);
+
+        point->y = get_number(column, _FILE, file);
+    } else {
+        point->x = get_number(column, NOT_FILE, file);
+        unexpect(',', column, ER_UNEXPECT_COMMA, NOT_FILE, file);
+
+        point->y = get_number(column, NOT_FILE, file);
+    }
+}
+
+void end_of_line(int* column, int is_file, FILE* file) // ропускает все пробельные символы до конца строки, либо до конца файла и выводит сообщение об ошибке, если после них идет какой-либо другой символ.
+{
+    char ch;
+    while ((ch = getc(file)) != '\n' && ch != EOF) {
+        if (ch != ' ') {
+            if (is_file == _FILE)
+                print_error(*column, ER_UNEXPECT_TOKEN, _FILE, file);
+            else
+                print_error(*column, ER_UNEXPECT_TOKEN, NOT_FILE, file);
+            exit(EXIT_FAILURE);
         }
+        *column += 1;
     }
-    if (firstBracket == endingSymbol)
-        ret = 0;
-    return ret;
 }
 
-int checkerrors(char* str, int countFigures) //Функция checkerrors вызывает предыдущие три функции для каждой строки файла и выводит на экран номер проверяемой фигуры и саму строку. Если какая-то из функций возвращает значение, отличное от нуля, то функция checkerrors не выводит сообщение об ошибке. //
+void take_info_circle(Circle* circle, int* column, int is_file, FILE* file) // считывает из файла (или stdin) радиус окружности, вызывая функцию get_number(), проверяет наличие закрывающей скобки и конец строки, а также вычисляет периметр и площадь окружности.
 {
-    printf("Figure %d:\n", countFigures);
-    printf("%s", str);
-    if (checker(str))
-        printf("Incorrect input of figure name\n\n");
-    else if (checkarg(str))
-        return 0;
-    else if (checkarguments(str))
-        printf("Wrong final symbol\n\n");
+    if (is_file == _FILE) {
+        get_point(&circle->point, column, _FILE, file);
+        expect(',', column, ER_EXPECT_COMMA, _FILE, file);
 
-    return 0;
+        circle->raduis = get_number(column, _FILE, file);
+
+        expect(')', column, ER_BACK_BRACE, _FILE, file);
+
+        end_of_line(column, _FILE, file);
+    } else {
+        get_point(&circle->point, column, NOT_FILE, file);
+        expect(',', column, ER_EXPECT_COMMA, NOT_FILE, file);
+
+        circle->raduis = get_number(column, NOT_FILE, file);
+
+        expect(')', column, ER_BACK_BRACE, NOT_FILE, file);
+
+        end_of_line(column, NOT_FILE, file);
+    }
+    circle->perimeter = 2 * M_PI * circle->raduis;
+    circle->area = M_PI * circle->raduis * circle->raduis;
 }
 
-int main() //В конечном итоге, программа проверяет все строки в файле и выводит сообщение об ошибке при наличии каких-либо ошибок в их содержании. Если все строки файлы были проверены успешно, программа завершается.//
+void show_info_circle(Circle* circle) // выводит информацию об окружности.
 {
-    FILE* file;
-    file = fopen("circle.txt", "r");
-    if (file == NULL) {
-        printf("Error of oppening file!\n");
-        return 1;
+    printf("circle(%.2f %.2f, %.2f)\n",
+           circle->point.x,
+           circle->point.y,
+           circle->raduis);
+    printf("\tarea = %.4f\n", circle->area);
+    printf("\tperimeter = %.4f\n", circle->perimeter);
+}
+
+void parser_stdin(FILE* stdin) // считывает данные из stdin и преобразует их в соответствующий тип геометрической фигуры.
+{
+    char geom[NAME_SIZE] = {0};
+    char ch;
+    int column;
+
+    puts("Enter a geometric shape (or q for exit):");
+    while ((ch = getc(stdin)) != EOF && ch != 'q') {
+        column = 0;
+        do {
+            if (ch == '(' || ch == ' ') {
+                to_lower_string(geom);
+                if (strcmp(geom, "circle") == 0) {
+                    Circle circle;
+                    take_info_circle(&circle, &column, NOT_FILE, stdin);
+                    printf("\nYou have entered: \n");
+                    show_info_circle(&circle);
+                    break;
+                } else {
+                    print_error(0, ER_NAME, NOT_FILE, stdin);
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (ch == ')') {
+                print_error(column, ER_BACK_BRACE, NOT_FILE, stdin);
+                exit(EXIT_FAILURE);
+            }
+
+            geom[column++] = ch;
+
+        } while ((ch = getc(stdin)) != '\n');
+        puts("Enter a new geometric shape (or q for exit):");
     }
-    char str1[SIZE];
-    int countFigures = 0;
-    while (fgets(str1, SIZE, file)) {
-        countFigures++;
-        checkerrors(str1, countFigures);
+}
+
+void parser_file(FILE* file) // считывает данные из файла и преобразует их в соответствующий тип геометрической фигуры.
+{
+    char geom[NAME_SIZE] = {0};
+    char ch;
+    int column;
+
+    while ((ch = getc(file)) != EOF && ch != 'q') {
+        column = 0;
+        do {
+            if (ch == '(' || ch == ' ') {
+                to_lower_string(geom);
+                if (strcmp(geom, "circle") == 0) {
+                    Circle circle;
+                    take_info_circle(&circle, &column, _FILE, file);
+                    printf("\nYou have entered: \n");
+                    show_info_circle(&circle);
+                    break;
+                } else {
+                    print_error(0, ER_NAME, _FILE, file);
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (ch == ')') {
+                print_error(column, ER_BACK_BRACE, _FILE, file);
+                exit(EXIT_FAILURE);
+            }
+
+            geom[column++] = ch;
+
+        } while ((ch = getc(file)) != '\n');
     }
-    fclose(file);
+}
+
+int main(int argc, char* argv[]) // проверяет наличие аргументов командной строки, открывает файл, если он указан, и вызывает соответствующую функцию парсинга. Если передано неправильное количество аргументов, выводится сообщение об ошибке.
+{
+    FILE* file = NULL;
+    if (argc < 2)
+        parser_stdin(stdin);
+    else if (argc == 2) {
+        if ((file = fopen(argv[1], "r")) == NULL) {
+            printf("\e[1;31mError\e[0m: can't open file \e[1;35m\"%s\"\e[0m\n",
+                   argv[1]);
+            exit(EXIT_FAILURE);
+        } else {
+            parser_file(file);
+            fclose(file);
+        }
+    } else {
+        printf("\e[1;35mUsage\e[0m: %s <filename>\n", argv[0]);
+    }
+
     return 0;
 }
