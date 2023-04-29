@@ -24,7 +24,7 @@ int main()
     FILE* file1;
     FILE* file;
 
-    file1 = fopen("geometry.txt", "r");
+    file1 = fopen("circle.txt", "r");
 
     if (!file1) {
         printf("Error! Cannot open file. Check file name.\n");
@@ -49,7 +49,7 @@ int main()
     fclose(file1);
 
     char a[length], b[6] = "circle";
-    file = fopen("geometry.txt", "r");
+    file = fopen("circle.txt", "r");
     while (fgets(a, length + 1, file)) {
         printf("%s", a);
 
